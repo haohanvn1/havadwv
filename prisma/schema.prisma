@@ -1,7 +1,7 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// Prisma schema — Nền tảng ôn luyện ĐGNL / ĐGTD
+// Thiết kế đã được xác nhận qua "Thiết Kế Hợp Nhất ĐGNL" (Phase 0-2).
+// 30 model, 9 nhóm chức năng. Xem tài liệu thiết kế cho lý do đằng sau
+// từng quyết định (examSnapshot bất biến, Draft→Approve, v.v).
 
 generator client {
   provider = "prisma-client"
@@ -10,4 +10,735 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum Role {
+  ADMIN
+  STUDENT
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  SHORT_ANSWER
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum ExamDifficulty {
+  EASY
+  MEDIUM
+  HARD
+  MIXED
+}
+
+enum QuestionStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum ExamStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum AttemptMode {
+  PRACTICE
+  MOCK_EXAM
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  AUTO_SUBMITTED
+  ABANDONED
+}
+
+enum LessonStatus {
+  DRAFT
+  PUBLISHED
+}
+
+/// Trạng thái xử lý file — dùng chung cho import câu hỏi và import cấu trúc đề.
+enum ProcessingStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+}
+
+/// Trạng thái duyệt — dùng chung cho ImportQuestionDraft và BlueprintImportDraft.
+enum DraftStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum BlueprintStatus {
+  DRAFT
+  APPROVED
+  ARCHIVED
+}
+
+enum GenerationMode {
+  RANDOM
+  SMART_RANDOM
+  MANUAL
+}
+
+enum GenerationJobStatus {
+  DRAFT
+  PREVIEW
+  CONFIRMED
+  FAILED
+}
+
+enum GenerationItemStatus {
+  PENDING
+  READY
+  INSUFFICIENT
+  CONFIRMED
+}
+
+enum LiveClassVisibility {
+  ALL_STUDENTS
+  SPECIFIC_GROUP
+  SPECIFIC_STUDENTS
+}
+
+enum LiveClassStatus {
+  DRAFT
+  SCHEDULED
+  LIVE
+  COMPLETED
+  CANCELLED
+}
+
+// ============================================================
+// NHÓM — NGƯỜI DÙNG
+// ============================================================
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  username     String     @unique
+  passwordHash String
+  role         Role
+  fullName     String
+  email        String?    @unique
+  phone        String?
+  status       UserStatus @default(ACTIVE)
+  lastLoginAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  studentProfile StudentProfile?
+
+  // Vai trò student
+  attempts                Attempt[]
+  videoProgress           StudentVideoProgress[]
+  liveClassAccesses       LiveClassAccess[]
+  liveClassParticipations LiveClassParticipant[]
+  studentGroupMemberships StudentGroupMember[]
+
+  // Vai trò admin / tác giả nội dung
+  createdExams             Exam[]
+  createdQuestions         Question[]
+  createdVideoLessons      VideoLesson[]
+  uploadedImportedFiles    ImportedFile[]
+  reviewedQuestionDrafts   ImportQuestionDraft[]
+  uploadedBlueprintImports BlueprintImport[]
+  reviewedBlueprintDrafts  BlueprintImportDraft[]
+  createdBlueprints        ExamBlueprint[]
+  createdGenerationJobs    ExamGenerationJob[]
+  createdLiveClasses       LiveClass[]
+  addedRecordings          LiveClassRecording[]
+
+  @@index([role])
+}
+
+model StudentProfile {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @unique @db.Uuid
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  class          String?
+  school         String?
+  targetExamType String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// ============================================================
+// NHÓM — PHÂN LOẠI
+// ============================================================
+
+model Subject {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  slug        String   @unique
+  description String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  topics                Topic[]
+  questions             Question[]
+  exams                 Exam[]
+  videoLessons          VideoLesson[]
+  liveClasses           LiveClass[]
+  examBlueprints        ExamBlueprint[]
+  blueprintRules        BlueprintRule[]
+  importQuestionDrafts  ImportQuestionDraft[]
+  blueprintImportDrafts BlueprintImportDraft[]
+}
+
+model Topic {
+  id        String   @id @default(uuid()) @db.Uuid
+  subjectId String   @db.Uuid
+  subject   Subject  @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  name      String
+  slug      String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  questions            Question[]
+  videoLessons         VideoLesson[]
+  liveClasses          LiveClass[]
+  blueprintRules       BlueprintRule[]
+  importQuestionDrafts ImportQuestionDraft[]
+
+  @@unique([subjectId, slug])
+  @@index([subjectId])
+}
+
+// ============================================================
+// NHÓM — NGÂN HÀNG CÂU HỎI
+// ============================================================
+
+model Question {
+  id                String         @id @default(uuid()) @db.Uuid
+  content           String         @db.Text
+  imageUrl          String?
+  type              QuestionType
+  correctAnswerText String?        @db.Text
+  difficulty        Difficulty
+  subjectId         String         @db.Uuid
+  subject           Subject        @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  topicId           String         @db.Uuid
+  topic             Topic          @relation(fields: [topicId], references: [id], onDelete: Restrict)
+  source            String?
+  year              Int?
+  hint              String?        @db.Text
+  explanation       String?        @db.Text
+  status            QuestionStatus @default(DRAFT)
+  tags              String[]       @default([])
+  cognitiveLevel    String?
+  usageCount        Int            @default(0)
+  createdById       String?        @db.Uuid
+  createdBy         User?          @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  options        QuestionOption[]
+  examQuestions  ExamQuestion[]
+  attemptAnswers AttemptAnswer[]
+  importDraft    ImportQuestionDraft?
+
+  @@index([subjectId])
+  @@index([topicId, difficulty])
+  @@index([status])
+}
+
+model QuestionOption {
+  id         String   @id @default(uuid()) @db.Uuid
+  questionId String   @db.Uuid
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  label      String
+  content    String   @db.Text
+  isCorrect  Boolean  @default(false)
+  order      Int
+
+  @@unique([questionId, label])
+  @@index([questionId])
+}
+
+// ============================================================
+// NHÓM — ĐỀ THI
+// ============================================================
+
+model Exam {
+  id                       String         @id @default(uuid()) @db.Uuid
+  title                    String
+  code                     String         @unique
+  examType                 String
+  subjectId                String?        @db.Uuid
+  subject                  Subject?       @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  durationMinutes          Int
+  questionCount            Int            @default(0)
+  maxAttempts              Int?
+  difficulty               ExamDifficulty
+  status                   ExamStatus     @default(DRAFT)
+  description              String?        @db.Text
+  generatedFromBlueprintId String?        @db.Uuid
+  generatedFromBlueprint   ExamBlueprint? @relation(fields: [generatedFromBlueprintId], references: [id], onDelete: SetNull)
+  createdById              String?        @db.Uuid
+  createdBy                User?          @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt                DateTime       @default(now())
+  updatedAt                DateTime       @updatedAt
+
+  examQuestions  ExamQuestion[]
+  attempts       Attempt[]
+  importedFiles  ImportedFile[]
+  generationItem ExamGenerationItem?
+
+  @@index([status])
+  @@index([subjectId, examType])
+}
+
+model ExamQuestion {
+  id         String   @id @default(uuid()) @db.Uuid
+  examId     String   @db.Uuid
+  exam       Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  questionId String   @db.Uuid
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  order      Int
+  points     Float    @default(1.0)
+  createdAt  DateTime @default(now())
+
+  @@unique([examId, questionId])
+  @@unique([examId, order])
+  @@index([questionId])
+}
+
+// ============================================================
+// NHÓM — LÀM BÀI
+// ============================================================
+
+model Attempt {
+  id              String        @id @default(uuid()) @db.Uuid
+  studentId       String        @db.Uuid
+  student         User          @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  examId          String?       @db.Uuid
+  exam            Exam?         @relation(fields: [examId], references: [id], onDelete: SetNull)
+  mode            AttemptMode
+  attemptNumber   Int
+  selectionParams Json?
+  examSnapshot    Json
+  startedAt       DateTime      @default(now())
+  endsAt          DateTime?
+  submittedAt     DateTime?
+  status          AttemptStatus @default(IN_PROGRESS)
+  score           Float?
+  correctCount    Int?
+  wrongCount      Int?
+  unansweredCount Int?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  answers AttemptAnswer[]
+
+  @@unique([studentId, examId, attemptNumber])
+  @@index([studentId, status])
+  @@index([examId])
+}
+
+model AttemptAnswer {
+  id                String    @id @default(uuid()) @db.Uuid
+  attemptId         String    @db.Uuid
+  attempt           Attempt   @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId        String?   @db.Uuid
+  question          Question? @relation(fields: [questionId], references: [id], onDelete: SetNull)
+  selectedOptionIds Json      @default("[]")
+  answerText        String?   @db.Text
+  isCorrect         Boolean?
+  hintUsed          Boolean   @default(false)
+  timeSpentSeconds  Int       @default(0)
+  changeCount       Int       @default(0)
+  answeredAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([attemptId, questionId])
+  @@index([questionId])
+}
+
+// ============================================================
+// NHÓM — BÀI GIẢNG & GIÁO VIÊN
+// ============================================================
+
+model Teacher {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  avatarUrl String?
+  bio       String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  videoLessons VideoLesson[]
+  liveClasses  LiveClass[]
+}
+
+model VideoLesson {
+  id              String       @id @default(uuid()) @db.Uuid
+  title           String
+  description     String?      @db.Text
+  subjectId       String       @db.Uuid
+  subject         Subject      @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  topicId         String?      @db.Uuid
+  topic           Topic?       @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  teacherId       String?      @db.Uuid
+  teacher         Teacher?     @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  youtubeUrl      String
+  youtubeVideoId  String
+  thumbnailUrl    String?
+  grade           String?
+  examType        String?
+  durationSeconds Int?
+  order           Int          @default(0)
+  status          LessonStatus @default(DRAFT)
+  publishedAt     DateTime?
+  createdById     String?      @db.Uuid
+  createdBy       User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  progress StudentVideoProgress[]
+
+  @@index([subjectId])
+  @@index([topicId])
+  @@index([status])
+}
+
+model StudentVideoProgress {
+  id              String      @id @default(uuid()) @db.Uuid
+  studentId       String      @db.Uuid
+  student         User        @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  videoLessonId   String      @db.Uuid
+  videoLesson     VideoLesson @relation(fields: [videoLessonId], references: [id], onDelete: Cascade)
+  progressSeconds Int         @default(0)
+  completed       Boolean     @default(false)
+  lastWatchedAt   DateTime    @default(now())
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@unique([studentId, videoLessonId])
+  @@index([studentId])
+}
+
+// ============================================================
+// NHÓM — IMPORT CÂU HỎI
+// ============================================================
+
+model ImportedFile {
+  id           String   @id @default(uuid()) @db.Uuid
+  filename     String
+  storagePath  String
+  mimeType     String
+  sizeBytes    Int
+  uploadedById String   @db.Uuid
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  examId       String?  @db.Uuid
+  exam         Exam?    @relation(fields: [examId], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+
+  importJobs ImportJob[]
+}
+
+model ImportJob {
+  id             String           @id @default(uuid()) @db.Uuid
+  importedFileId String           @db.Uuid
+  importedFile   ImportedFile     @relation(fields: [importedFileId], references: [id], onDelete: Cascade)
+  status         ProcessingStatus @default(PENDING)
+  errorMessage   String?          @db.Text
+  totalExtracted Int              @default(0)
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime         @default(now())
+
+  drafts ImportQuestionDraft[]
+
+  @@index([status])
+  @@index([importedFileId])
+}
+
+model ImportQuestionDraft {
+  id                  String      @id @default(uuid()) @db.Uuid
+  importJobId         String      @db.Uuid
+  importJob           ImportJob   @relation(fields: [importJobId], references: [id], onDelete: Cascade)
+  rawText             String      @db.Text
+  parsedContent       Json
+  suggestedSubjectId  String?     @db.Uuid
+  suggestedSubject    Subject?    @relation(fields: [suggestedSubjectId], references: [id], onDelete: SetNull)
+  suggestedTopicId    String?     @db.Uuid
+  suggestedTopic      Topic?      @relation(fields: [suggestedTopicId], references: [id], onDelete: SetNull)
+  suggestedDifficulty Difficulty?
+  status              DraftStatus @default(PENDING)
+  reviewedById        String?     @db.Uuid
+  reviewedBy          User?       @relation(fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt          DateTime?
+  approvedQuestionId  String?     @unique @db.Uuid
+  approvedQuestion    Question?   @relation(fields: [approvedQuestionId], references: [id], onDelete: SetNull)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  @@index([status, importJobId])
+}
+
+// ============================================================
+// NHÓM — CẤU TRÚC ĐỀ (BLUEPRINT)
+// ============================================================
+
+model BlueprintImport {
+  id               String           @id @default(uuid()) @db.Uuid
+  filename         String
+  storagePath      String
+  mimeType         String
+  sizeBytes        Int
+  uploadedById     String           @db.Uuid
+  uploadedBy       User             @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  status           ProcessingStatus @default(PENDING)
+  errorMessage     String?          @db.Text
+  rawExtractedText String?          @db.Text
+  createdAt        DateTime         @default(now())
+  completedAt      DateTime?
+
+  draft BlueprintImportDraft?
+}
+
+model BlueprintImportDraft {
+  id                    String          @id @default(uuid()) @db.Uuid
+  blueprintImportId     String          @unique @db.Uuid
+  blueprintImport       BlueprintImport @relation(fields: [blueprintImportId], references: [id], onDelete: Cascade)
+  parsedName            String?
+  parsedExamType        String?
+  parsedSubjectId       String?         @db.Uuid
+  parsedSubject         Subject?        @relation(fields: [parsedSubjectId], references: [id], onDelete: SetNull)
+  parsedTotalQuestions  Int?
+  parsedDurationMinutes Int?
+  parsedStructure       Json
+  validationErrors      Json?
+  status                DraftStatus     @default(PENDING)
+  reviewedById          String?         @db.Uuid
+  reviewedBy            User?           @relation(fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt            DateTime?
+  approvedBlueprintId   String?         @unique @db.Uuid
+  approvedBlueprint     ExamBlueprint?  @relation(fields: [approvedBlueprintId], references: [id], onDelete: SetNull)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+}
+
+model ExamBlueprint {
+  id              String          @id @default(uuid()) @db.Uuid
+  name            String
+  examType        String
+  subjectId       String?         @db.Uuid
+  subject         Subject?        @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  totalQuestions  Int
+  durationMinutes Int?
+  status          BlueprintStatus @default(DRAFT)
+  createdById     String          @db.Uuid
+  createdBy       User            @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  sections          BlueprintSection[]
+  generationJobs    ExamGenerationJob[]
+  exams             Exam[]
+  // 1-1 ngược của BlueprintImportDraft.approvedBlueprintId — không có cột FK
+  // riêng ở đây, tránh lưu trùng cùng một quan hệ ở cả hai chiều.
+  sourceImportDraft BlueprintImportDraft?
+}
+
+model BlueprintSection {
+  id            String        @id @default(uuid()) @db.Uuid
+  blueprintId   String        @db.Uuid
+  blueprint     ExamBlueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+  name          String
+  order         Int
+  questionCount Int
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  rules BlueprintRule[]
+
+  @@unique([blueprintId, order])
+}
+
+model BlueprintRule {
+  id             String           @id @default(uuid()) @db.Uuid
+  sectionId      String           @db.Uuid
+  section        BlueprintSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  subjectId      String?          @db.Uuid
+  subject        Subject?         @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  topicId        String?          @db.Uuid
+  topic          Topic?           @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  difficulty     Difficulty?
+  questionType   QuestionType?
+  cognitiveLevel String?
+  year           Int?
+  source         String?
+  requiredTags   String[]         @default([])
+  quantity       Int
+  order          Int
+
+  @@index([sectionId])
+  @@index([topicId, difficulty])
+}
+
+// ============================================================
+// NHÓM — SINH ĐỀ TỰ ĐỘNG
+// ============================================================
+
+model ExamGenerationJob {
+  id                 String              @id @default(uuid()) @db.Uuid
+  blueprintId        String              @db.Uuid
+  blueprint          ExamBlueprint       @relation(fields: [blueprintId], references: [id], onDelete: Restrict)
+  mode               GenerationMode
+  requestedExamCount Int                 @default(1)
+  ruleOverrides      Json?
+  status             GenerationJobStatus @default(DRAFT)
+  createdById        String              @db.Uuid
+  createdBy          User                @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt          DateTime            @default(now())
+  confirmedAt        DateTime?
+
+  items ExamGenerationItem[]
+}
+
+model ExamGenerationItem {
+  id                  String               @id @default(uuid()) @db.Uuid
+  jobId               String               @db.Uuid
+  job                 ExamGenerationJob    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  sequenceNumber      Int
+  status              GenerationItemStatus @default(PENDING)
+  selectedQuestions   Json                 @default("[]")
+  distributionSummary Json?
+  resultingExamId     String?              @unique @db.Uuid
+  resultingExam       Exam?                @relation(fields: [resultingExamId], references: [id], onDelete: SetNull)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  @@unique([jobId, sequenceNumber])
+  @@index([jobId, status])
+}
+
+// ============================================================
+// NHÓM — NHÓM HỌC SINH
+// ============================================================
+
+model StudentGroup {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members           StudentGroupMember[]
+  liveClassAccesses LiveClassAccess[]
+}
+
+model StudentGroupMember {
+  id        String       @id @default(uuid()) @db.Uuid
+  groupId   String       @db.Uuid
+  group     StudentGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  studentId String       @db.Uuid
+  student   User         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  addedAt   DateTime     @default(now())
+
+  @@unique([groupId, studentId])
+  @@index([studentId])
+}
+
+// ============================================================
+// NHÓM — LỚP HỌC TRỰC TIẾP
+// ============================================================
+
+model LiveClass {
+  id                 String              @id @default(uuid()) @db.Uuid
+  title              String
+  description        String?             @db.Text
+  subjectId          String?             @db.Uuid
+  subject            Subject?            @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  topicId            String?             @db.Uuid
+  topic              Topic?              @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  teacherId          String?             @db.Uuid
+  teacher            Teacher?            @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  startTime          DateTime
+  endTime            DateTime
+  timezone           String              @default("Asia/Ho_Chi_Minh")
+  joinBeforeMinutes  Int                 @default(15)
+  zoomJoinUrl        String
+  zoomMeetingId      String?
+  zoomPassword       String?
+  visibility         LiveClassVisibility @default(ALL_STUDENTS)
+  status             LiveClassStatus     @default(DRAFT)
+  cancelReason       String?
+  meetingProvider    String              @default("MANUAL")
+  externalMeetingRef String?
+  createdById        String              @db.Uuid
+  createdBy          User                @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  accesses     LiveClassAccess[]
+  participants LiveClassParticipant[]
+  recording    LiveClassRecording?
+
+  @@index([status, startTime])
+}
+
+model LiveClassAccess {
+  id             String        @id @default(uuid()) @db.Uuid
+  liveClassId    String        @db.Uuid
+  liveClass      LiveClass     @relation(fields: [liveClassId], references: [id], onDelete: Cascade)
+  studentGroupId String?       @db.Uuid
+  studentGroup   StudentGroup? @relation(fields: [studentGroupId], references: [id], onDelete: Restrict)
+  studentId      String?       @db.Uuid
+  student        User?         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  createdAt      DateTime      @default(now())
+
+  // Đúng một trong hai cột studentGroupId/studentId có giá trị — ràng buộc
+  // CHECK được thêm thủ công vào migration SQL (Prisma schema chưa hỗ trợ
+  // khai báo CHECK constraint dạng multi-column trực tiếp).
+  @@index([liveClassId])
+  @@index([studentGroupId])
+  @@index([studentId])
+}
+
+model LiveClassParticipant {
+  id          String    @id @default(uuid()) @db.Uuid
+  liveClassId String    @db.Uuid
+  liveClass   LiveClass @relation(fields: [liveClassId], references: [id], onDelete: Cascade)
+  studentId   String    @db.Uuid
+  student     User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  joinedAt    DateTime  @default(now())
+
+  @@unique([liveClassId, studentId])
+}
+
+model LiveClassRecording {
+  id             String    @id @default(uuid()) @db.Uuid
+  liveClassId    String    @unique @db.Uuid
+  liveClass      LiveClass @relation(fields: [liveClassId], references: [id], onDelete: Cascade)
+  youtubeUrl     String
+  youtubeVideoId String
+  addedById      String    @db.Uuid
+  addedBy        User      @relation(fields: [addedById], references: [id], onDelete: Restrict)
+  addedAt        DateTime  @default(now())
 }
