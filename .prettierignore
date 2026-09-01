@@ -1,0 +1,11 @@
+node_modules
+.next
+lib/generated
+prisma/migrations
+package-lock.json
+
+# Vendor-generated agent skill docs (from `prisma init`) — not our content.
+.agents
+.claude/skills
+.windsurf/skills
+skills-lock.json
