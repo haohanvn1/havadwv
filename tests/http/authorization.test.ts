@@ -153,6 +153,66 @@ describe("Phase 4 — Dashboard đọc số liệu thật từ database", () => 
   });
 });
 
+describe("Phase 5 — /student root và các trang module placeholder", () => {
+  it("GET /student (chưa đăng nhập) → redirect /login", async () => {
+    const res = await getNoRedirect("/student");
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toContain("/login");
+  });
+
+  it("GET /student (STUDENT) → redirect /student/dashboard", async () => {
+    const res = await getNoRedirect("/student", studentCookie);
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toContain("/student/dashboard");
+  });
+
+  it("GET /student (ADMIN) → không được vào, bounce khỏi khu vực student", async () => {
+    const res = await getNoRedirect("/student", adminCookie);
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).not.toContain("/student");
+  });
+
+  // Đại diện cho các route module chưa implement — tất cả đi qua cùng một
+  // StudentLayout nên chỉ cần kiểm tra 2 route là đủ chứng minh cơ chế áp
+  // dụng chung, không cần lặp lại cho cả 8 route.
+  for (const pathname of ["/student/exams", "/student/video-lessons"]) {
+    it(`GET ${pathname} (STUDENT) → 200, hiển thị placeholder`, async () => {
+      const res = await getNoRedirect(pathname, studentCookie);
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      expect(html).toContain("Chức năng đang được phát triển");
+    });
+
+    it(`GET ${pathname} (ADMIN) → bị chặn`, async () => {
+      const res = await getNoRedirect(pathname, adminCookie);
+      expect(res.status).toBe(307);
+      expect(res.headers.get("location")).not.toContain(pathname);
+    });
+
+    it(`GET ${pathname} (chưa đăng nhập) → redirect /login`, async () => {
+      const res = await getNoRedirect(pathname);
+      expect(res.status).toBe(307);
+      expect(res.headers.get("location")).toContain("/login");
+    });
+  }
+
+  it("GET /student/profile (STUDENT) → 200, hiển thị đúng hồ sơ của chính họ", async () => {
+    const res = await getNoRedirect("/student/profile", studentCookie);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("student1");
+  });
+});
+
+describe("Phase 5 — Student dashboard đọc dữ liệu thật từ database", () => {
+  it("Dashboard hiển thị empty state thật khi student chưa có hoạt động, không bịa dữ liệu", async () => {
+    const res = await getNoRedirect("/student/dashboard", studentCookie);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("Bạn chưa làm đề nào.");
+  });
+});
+
 describe("Token không hợp lệ", () => {
   it("cookie session là rác → xử lý như chưa đăng nhập, không lỗi 500", async () => {
     const res = await getNoRedirect("/admin/dashboard", "session=abc.def.ghi");

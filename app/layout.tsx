@@ -3,7 +3,7 @@ import "./globals.css";
 import { Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
 
-const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
+const geist = Geist({ subsets: ["latin", "vietnamese"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
   title: "HavaEdu",
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={cn("font-sans", geist.variable)}>
+    <html lang="vi" className={cn("font-sans", geist.variable)}>
       <body>{children}</body>
     </html>
   );

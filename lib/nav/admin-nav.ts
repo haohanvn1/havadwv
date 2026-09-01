@@ -11,6 +11,9 @@ import {
   Wand2,
   type LucideIcon,
 } from "lucide-react";
+import { isNavItemActive } from "./nav-utils";
+
+export { isNavItemActive };
 
 export interface AdminNavItem {
   label: string;
@@ -63,11 +66,6 @@ export const adminNavGroups: AdminNavGroup[] = [
 ];
 
 export const adminNavItems: AdminNavItem[] = adminNavGroups.flatMap((group) => group.items);
-
-/** "/admin/students/123" vẫn tính là active cho mục "Students" (href "/admin/students"). */
-export function isNavItemActive(pathname: string, href: string): boolean {
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
 
 const EXTRA_PAGE_TITLES: Record<string, string> = {
   "/admin/profile": "Hồ sơ",
