@@ -7,19 +7,10 @@ import { authenticate, LoginError } from "@/server/services/authService";
 import { signSession } from "@/lib/auth/session";
 import { setSessionCookie, clearSessionCookie } from "@/lib/auth/cookies";
 import { checkRateLimit, resetRateLimit } from "@/lib/auth/rate-limit";
+import { resolveSafeRedirectPath, getDefaultDashboardPath } from "@/lib/auth/redirect-target";
 
 export interface LoginFormState {
   error?: string;
-}
-
-/** Chỉ cho phép chuyển hướng nội bộ tuyệt đối (chặn open redirect qua "from"). */
-function isSafeRedirectPath(path: FormDataEntryValue | null): path is string {
-  return (
-    typeof path === "string" &&
-    path.startsWith("/") &&
-    !path.startsWith("//") &&
-    !path.startsWith("/\\")
-  );
 }
 
 export async function loginAction(
@@ -60,11 +51,7 @@ export async function loginAction(
   await setSessionCookie(token);
 
   const from = formData.get("from");
-  const target = isSafeRedirectPath(from)
-    ? from
-    : user.role === "ADMIN"
-      ? "/admin/dashboard"
-      : "/student/dashboard";
+  const target = resolveSafeRedirectPath(from, user.role) ?? getDefaultDashboardPath(user.role);
 
   redirect(target);
 }

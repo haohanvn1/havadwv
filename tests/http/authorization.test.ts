@@ -97,6 +97,62 @@ describe("Route protection — RBAC", () => {
   });
 });
 
+describe("Phase 4 — /admin root và các trang module placeholder", () => {
+  it("GET /admin (chưa đăng nhập) → redirect /login", async () => {
+    const res = await getNoRedirect("/admin");
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toContain("/login");
+  });
+
+  it("GET /admin (ADMIN) → redirect /admin/dashboard", async () => {
+    const res = await getNoRedirect("/admin", adminCookie);
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toContain("/admin/dashboard");
+  });
+
+  it("GET /admin (STUDENT) → không được vào, bounce khỏi khu vực admin", async () => {
+    const res = await getNoRedirect("/admin", studentCookie);
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).not.toContain("/admin");
+  });
+
+  // Đại diện cho 8 route module chưa implement — tất cả đi qua cùng một
+  // AdminLayout nên chỉ cần kiểm tra 2 route là đủ chứng minh cơ chế áp
+  // dụng chung, không cần lặp lại cho cả 8 route.
+  for (const pathname of ["/admin/question-bank", "/admin/settings"]) {
+    it(`GET ${pathname} (ADMIN) → 200, hiển thị placeholder`, async () => {
+      const res = await getNoRedirect(pathname, adminCookie);
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      expect(html).toContain("Module đang được phát triển.");
+    });
+
+    it(`GET ${pathname} (STUDENT) → bị chặn`, async () => {
+      const res = await getNoRedirect(pathname, studentCookie);
+      expect(res.status).toBe(307);
+      expect(res.headers.get("location")).not.toContain(pathname);
+    });
+
+    it(`GET ${pathname} (chưa đăng nhập) → redirect /login`, async () => {
+      const res = await getNoRedirect(pathname);
+      expect(res.status).toBe(307);
+      expect(res.headers.get("location")).toContain("/login");
+    });
+  }
+});
+
+describe("Phase 4 — Dashboard đọc số liệu thật từ database", () => {
+  it("Question count hiển thị trên dashboard khớp đúng COUNT thật trong DB", async () => {
+    const realCount = await prisma.question.count();
+    const res = await getNoRedirect("/admin/dashboard", adminCookie);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    // Không so khớp bằng regex phức tạp — chỉ cần con số thật có xuất hiện
+    // trong HTML là đủ bằng chứng dashboard không hard-code số liệu.
+    expect(html).toContain(`>${realCount}<`);
+  });
+});
+
 describe("Token không hợp lệ", () => {
   it("cookie session là rác → xử lý như chưa đăng nhập, không lỗi 500", async () => {
     const res = await getNoRedirect("/admin/dashboard", "session=abc.def.ghi");

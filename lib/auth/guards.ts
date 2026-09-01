@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -37,8 +38,13 @@ function toAuthUser(user: {
  * Đọc session hiện tại + xác nhận lại status từ DB (không chỉ tin JWT) —
  * đây là lớp chặn tài khoản INACTIVE thật sự, vì JWT là stateless và không
  * tự biết được nếu admin vừa khoá tài khoản sau khi token đã phát hành.
+ *
+ * Bọc bằng React `cache()` để layout và page trong cùng một request (vd
+ * AdminLayout gọi requireRole rồi trang con cũng gọi lại để lấy `user`)
+ * chỉ tốn đúng một lượt truy vấn DB, không phải hai — không cần truyền
+ * user qua props hay tự dựng cơ chế cache riêng.
  */
-export async function getCurrentUser(): Promise<AuthUser | null> {
+export const getCurrentUser = cache(async (): Promise<AuthUser | null> => {
   const token = await getSessionCookie();
   if (!token) return null;
 
@@ -49,7 +55,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   if (!user || user.status !== "ACTIVE") return null;
 
   return toAuthUser(user);
-}
+});
 
 // ---------- Dùng trong Server Component / Page / Layout ----------
 
