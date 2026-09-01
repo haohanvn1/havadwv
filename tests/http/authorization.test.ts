@@ -119,7 +119,7 @@ describe("Phase 4 — /admin root và các trang module placeholder", () => {
   // Đại diện cho 8 route module chưa implement — tất cả đi qua cùng một
   // AdminLayout nên chỉ cần kiểm tra 2 route là đủ chứng minh cơ chế áp
   // dụng chung, không cần lặp lại cho cả 8 route.
-  for (const pathname of ["/admin/question-bank", "/admin/settings"]) {
+  for (const pathname of ["/admin/settings"]) {
     it(`GET ${pathname} (ADMIN) → 200, hiển thị placeholder`, async () => {
       const res = await getNoRedirect(pathname, adminCookie);
       expect(res.status).toBe(200);
@@ -210,6 +210,68 @@ describe("Phase 5 — Student dashboard đọc dữ liệu thật từ database"
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain("Bạn chưa làm đề nào.");
+  });
+});
+
+describe("Phase 6 — Question Bank: authorization", () => {
+  it("GET /admin/question-bank (chưa đăng nhập) → redirect /login", async () => {
+    const res = await getNoRedirect("/admin/question-bank");
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toContain("/login");
+  });
+
+  it("GET /admin/question-bank (ADMIN) → 200", async () => {
+    const res = await getNoRedirect("/admin/question-bank", adminCookie);
+    expect(res.status).toBe(200);
+  });
+
+  it("GET /admin/question-bank (STUDENT) → bị chặn", async () => {
+    const res = await getNoRedirect("/admin/question-bank", studentCookie);
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).not.toContain("/admin");
+  });
+
+  it("GET /admin/question-bank/new (STUDENT) → bị chặn", async () => {
+    const res = await getNoRedirect("/admin/question-bank/new", studentCookie);
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).not.toContain("/admin");
+  });
+
+  it("GET /api/admin/questions (chưa đăng nhập) → 401", async () => {
+    const res = await getNoRedirect("/api/admin/questions");
+    expect(res.status).toBe(401);
+  });
+
+  it("GET /api/admin/questions (STUDENT) → 403", async () => {
+    const res = await getNoRedirect("/api/admin/questions", studentCookie);
+    expect(res.status).toBe(403);
+  });
+
+  it("GET /api/admin/questions (ADMIN) → 200 + dữ liệu thật", async () => {
+    const res = await getNoRedirect("/api/admin/questions", adminCookie);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.questions)).toBe(true);
+    expect(body.total).toBeGreaterThan(0);
+  });
+
+  it("POST /api/admin/questions (STUDENT) → 403, không tạo được câu hỏi", async () => {
+    const res = await fetch(`${BASE_URL}/api/admin/questions`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: studentCookie },
+      body: JSON.stringify({ content: "hack" }),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("GET /api/admin/subjects (ADMIN) → 200", async () => {
+    const res = await getNoRedirect("/api/admin/subjects", adminCookie);
+    expect(res.status).toBe(200);
+  });
+
+  it("GET /api/admin/subjects (STUDENT) → 403", async () => {
+    const res = await getNoRedirect("/api/admin/subjects", studentCookie);
+    expect(res.status).toBe(403);
   });
 });
 

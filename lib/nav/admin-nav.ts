@@ -69,6 +69,7 @@ export const adminNavItems: AdminNavItem[] = adminNavGroups.flatMap((group) => g
 
 const EXTRA_PAGE_TITLES: Record<string, string> = {
   "/admin/profile": "Hồ sơ",
+  "/admin/question-bank/new": "Thêm câu hỏi",
 };
 
 export function getAdminPageTitle(pathname: string): string {
