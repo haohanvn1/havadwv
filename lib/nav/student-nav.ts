@@ -4,6 +4,7 @@ import {
   CalendarDays,
   GraduationCap,
   Home,
+  Layers,
   NotebookPen,
   RotateCcw,
   Timer,
@@ -52,6 +53,7 @@ export const studentNavGroups: StudentNavGroup[] = [
     label: "Luyện thi",
     items: [
       { label: "Đề thi", href: "/student/exams", icon: BookOpen, primaryMobile: true },
+      { label: "Bộ đề", href: "/student/exam-sets", icon: Layers },
       { label: "Ôn tập", href: "/student/exams/practice", icon: NotebookPen },
       { label: "Thi thử", href: "/student/exams/mock", icon: Timer },
       {
@@ -67,7 +69,7 @@ export const studentNavGroups: StudentNavGroup[] = [
   {
     label: "Học tập",
     items: [
-      { label: "Bài giảng", href: "/student/video-lessons", icon: Video, primaryMobile: true },
+      { label: "Lớp", href: "/student/video-lessons", icon: Video, primaryMobile: true },
       { label: "Lớp học trực tiếp", href: "/student/live-classes", icon: GraduationCap },
       { label: "Lịch học", href: "/student/calendar", icon: CalendarDays },
     ],

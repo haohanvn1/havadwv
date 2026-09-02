@@ -17,7 +17,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import type { AttemptDetail } from "@/server/services/studentAttemptService";
+import type { AttemptDetail, QuestionReviewItem } from "@/server/services/studentAttemptService";
 import { QuestionNavigatorGrid } from "./question-navigator";
 import { QuestionPanel, type QuestionAnswerState, type SaveState } from "./question-panel";
 import { ResultSummary, type AttemptResultSummary } from "./result-summary";
@@ -45,6 +45,7 @@ export function AttemptRunner({ initial }: { initial: AttemptDetail }) {
   const [submitting, setSubmitting] = useState(false);
   const [autoSubmitting, setAutoSubmitting] = useState(false);
   const [result, setResult] = useState<AttemptResultSummary | null>(null);
+  const [reviewByQuestionId, setReviewByQuestionId] = useState<Map<string, QuestionReviewItem> | null>(null);
 
   const saveSequencerRef = useRef(createSaveSequencer());
   const questionElementsRef = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -78,6 +79,18 @@ export function AttemptRunner({ initial }: { initial: AttemptDetail }) {
       .then((res) => (res.ok ? res.json() : null))
       .then((body) => {
         if (!cancelled && body?.result) setResult(body.result);
+      })
+      .catch(() => {});
+    // Phase 9D — chi tiết đúng/sai từng câu, chỉ gọi và chỉ hiển thị được sau
+    // khi đã khoá bài (isLocked) — không bao giờ gọi trong lúc IN_PROGRESS.
+    fetch(`/api/student/attempts/${initial.id}/review`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (cancelled || !body?.review) return;
+        const map = new Map<string, QuestionReviewItem>(
+          (body.review.questions as QuestionReviewItem[]).map((q) => [q.questionId, q]),
+        );
+        setReviewByQuestionId(map);
       })
       .catch(() => {});
     return () => {
@@ -343,6 +356,7 @@ export function AttemptRunner({ initial }: { initial: AttemptDetail }) {
               onMultipleChoiceToggle={(optionId) => toggleMultipleChoice(question.questionId, optionId)}
               onShortAnswerChange={(text) => setShortAnswerText(question.questionId, text)}
               onExplicitSave={() => explicitSave(question.questionId)}
+              review={reviewByQuestionId?.get(question.questionId)}
             />
           ))}
         </div>

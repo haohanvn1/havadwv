@@ -8,9 +8,11 @@ import {
   parseExamSnapshot,
   sanitizeSnapshotForStudent,
   ExamNotFoundError,
+  type SnapshotQuestion,
 } from "./examSnapshotService";
 import { validateAnswerPayload } from "@/validators/attemptAnswer";
-import { computeMaxScore, scoreAndPersistIfNeeded } from "./scoringService";
+import { computeMaxScore, scoreAndPersistIfNeeded, scoreAttempt, type AnswerLike } from "./scoringService";
+import { getAccessibleSubjectIds, hasSubjectAccess } from "./subjectAccessService";
 
 export { ExamNotFoundError };
 
@@ -159,9 +161,18 @@ function toAvailableExam(exam: {
   };
 }
 
+/**
+ * Đề không gắn subjectId (null) coi là nội dung "không giới hạn môn", hiển
+ * thị công khai cho mọi học sinh — chỉ đề có subjectId mới bị lọc theo
+ * SubjectAccess (allow-list nghiêm ngặt, Phase 10).
+ */
 export async function listAvailableExamsForStudent(studentId: string): Promise<AvailableExamForStudent[]> {
+  const accessibleSubjectIds = await getAccessibleSubjectIds(studentId);
   const exams = await prisma.exam.findMany({
-    where: { status: "PUBLISHED" },
+    where: {
+      status: "PUBLISHED",
+      OR: [{ subjectId: null }, { subjectId: { in: accessibleSubjectIds } }],
+    },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
@@ -177,7 +188,32 @@ export async function listAvailableExamsForStudent(studentId: string): Promise<A
   return exams.map(toAvailableExam);
 }
 
-/** Chi tiết 1 Exam cho Student — null nếu không tồn tại hoặc chưa PUBLISHED (tránh lộ Exam DRAFT/ARCHIVED qua route chi tiết). */
+/** Danh sách Exam PUBLISHED thuộc 1 Subject cụ thể — dùng cho trang chi tiết "Bộ đề". */
+export async function listExamsForSubject(
+  studentId: string,
+  subjectId: string,
+): Promise<AvailableExamForStudent[]> {
+  const allowed = await hasSubjectAccess(studentId, subjectId);
+  if (!allowed) throw new ExamNotAvailableError();
+
+  const exams = await prisma.exam.findMany({
+    where: { status: "PUBLISHED", subjectId },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      title: true,
+      examType: true,
+      questionCount: true,
+      durationMinutes: true,
+      maxAttempts: true,
+      subject: { select: { name: true } },
+      attempts: { where: { studentId }, select: { id: true, status: true } },
+    },
+  });
+  return exams.map(toAvailableExam);
+}
+
+/** Chi tiết 1 Exam cho Student — null nếu không tồn tại, chưa PUBLISHED, hoặc học sinh chưa được cấp quyền môn của đề (tránh lộ Exam DRAFT/ARCHIVED/không có quyền qua route chi tiết). */
 export async function getExamAvailabilityForStudent(
   studentId: string,
   examId: string,
@@ -192,11 +228,13 @@ export async function getExamAvailabilityForStudent(
       durationMinutes: true,
       maxAttempts: true,
       status: true,
+      subjectId: true,
       subject: { select: { name: true } },
       attempts: { where: { studentId }, select: { id: true, status: true } },
     },
   });
   if (!exam || exam.status !== "PUBLISHED") return null;
+  if (exam.subjectId !== null && !(await hasSubjectAccess(studentId, exam.subjectId))) return null;
   return toAvailableExam(exam);
 }
 
@@ -220,6 +258,9 @@ export async function startOrResumeAttempt(studentId: string, examId: string): P
   const exam = await prisma.exam.findUnique({ where: { id: examId } });
   if (!exam) throw new ExamNotFoundError();
   if (exam.status !== "PUBLISHED") throw new ExamNotAvailableError();
+  if (exam.subjectId !== null && !(await hasSubjectAccess(studentId, exam.subjectId))) {
+    throw new ExamNotAvailableError();
+  }
 
   const existingActive = await prisma.attempt.findFirst({
     where: { studentId, examId, status: "IN_PROGRESS" },
@@ -425,4 +466,89 @@ export async function getAttemptResult(studentId: string, attemptId: string) {
     wrongCount: scored.wrongCount,
     unansweredCount: scored.unansweredCount,
   };
+}
+
+export interface QuestionReviewOption {
+  id: string;
+  label: string;
+  content: string;
+  isCorrect: boolean;
+}
+
+export interface QuestionReviewItem {
+  questionId: string;
+  order: number;
+  type: SnapshotQuestion["type"];
+  content: string;
+  options: QuestionReviewOption[];
+  correctAnswerText: string | null;
+  studentAnswer: { selectedOptionIds: string[]; answerText: string | null };
+  isAnswered: boolean;
+  isCorrect: boolean;
+  score: number;
+  maxScore: number;
+}
+
+/**
+ * Review chi tiết từng câu (Phase 9D) — CHỈ xem được sau khi Attempt đã
+ * SUBMITTED/AUTO_SUBMITTED (chặn tuyệt đối trong lúc IN_PROGRESS, nếu không
+ * sẽ lộ đáp án đúng giữa chừng bài thi — đúng nguyên tắc đã giữ xuyên suốt
+ * 9A/9B/9C). Đây là NƠI DUY NHẤT được phép trả isCorrect/correctAnswerText
+ * cho Student, vì bài đã kết thúc. Tái dùng scoreAttempt() của Phase 9B để
+ * lấy đúng/sai từng câu — không viết lại logic chấm điểm ở đây.
+ */
+export async function getAttemptReview(studentId: string, attemptId: string): Promise<{
+  attemptId: string;
+  questions: QuestionReviewItem[];
+}> {
+  const attempt = await loadOwnedAttempt(studentId, attemptId);
+  const finalized = await finalizeIfExpired(attempt);
+
+  if (finalized.status !== "SUBMITTED" && finalized.status !== "AUTO_SUBMITTED") {
+    throw new AttemptNotSubmittedError();
+  }
+
+  const snapshot = parseExamSnapshot(finalized.examSnapshot);
+  const rawAnswers = await prisma.attemptAnswer.findMany({
+    where: { attemptId },
+    select: { questionId: true, selectedOptionIds: true, answerText: true },
+  });
+  const answerByQuestionId = new Map(
+    rawAnswers
+      .filter((a): a is typeof a & { questionId: string } => a.questionId !== null)
+      .map((a) => [a.questionId, a]),
+  );
+
+  const answersForScoring: AnswerLike[] = [...answerByQuestionId.values()].map((a) => ({
+    questionId: a.questionId,
+    selectedOptionIds: a.selectedOptionIds,
+    answerText: a.answerText,
+  }));
+  const scoring = scoreAttempt(snapshot, answersForScoring);
+  const scoreByQuestionId = new Map(scoring.questionResults.map((r) => [r.questionId, r]));
+
+  const questions: QuestionReviewItem[] = [...snapshot.questions]
+    .sort((a, b) => a.order - b.order)
+    .map((q) => {
+      const answer = answerByQuestionId.get(q.questionId);
+      const score = scoreByQuestionId.get(q.questionId);
+      return {
+        questionId: q.questionId,
+        order: q.order,
+        type: q.type,
+        content: q.content,
+        options: q.options.map((o) => ({ id: o.id, label: o.label, content: o.content, isCorrect: o.isCorrect })),
+        correctAnswerText: q.correctAnswerText,
+        studentAnswer: {
+          selectedOptionIds: (answer?.selectedOptionIds as unknown as string[]) ?? [],
+          answerText: answer?.answerText ?? null,
+        },
+        isAnswered: score?.isAnswered ?? false,
+        isCorrect: score?.isCorrect ?? false,
+        score: score?.score ?? 0,
+        maxScore: score?.maxScore ?? 1,
+      };
+    });
+
+  return { attemptId: finalized.id, questions };
 }

@@ -135,17 +135,18 @@ enum LiveClassStatus {
 // ============================================================
 
 model User {
-  id           String     @id @default(uuid()) @db.Uuid
-  username     String     @unique
-  passwordHash String
-  role         Role
-  fullName     String
-  email        String?    @unique
-  phone        String?
-  status       UserStatus @default(ACTIVE)
-  lastLoginAt  DateTime?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id                 String     @id @default(uuid()) @db.Uuid
+  username           String     @unique
+  passwordHash       String
+  role               Role
+  fullName           String
+  email              String?    @unique
+  phone              String?
+  status             UserStatus @default(ACTIVE)
+  mustChangePassword Boolean    @default(false)
+  lastLoginAt        DateTime?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
 
   studentProfile StudentProfile?
 
@@ -155,6 +156,7 @@ model User {
   liveClassAccesses       LiveClassAccess[]
   liveClassParticipations LiveClassParticipant[]
   studentGroupMemberships StudentGroupMember[]
+  subjectAccesses         SubjectAccess[]
 
   // Vai trò admin / tác giả nội dung
   createdExams             Exam[]
@@ -205,6 +207,8 @@ model Subject {
   blueprintRules        BlueprintRule[]
   importQuestionDrafts  ImportQuestionDraft[]
   blueprintImportDrafts BlueprintImportDraft[]
+  subjectAccesses       SubjectAccess[]
+  rosterColumnMappings  RosterColumnMapping[]
 }
 
 model Topic {
@@ -651,6 +655,7 @@ model StudentGroup {
 
   members           StudentGroupMember[]
   liveClassAccesses LiveClassAccess[]
+  subjectAccesses   SubjectAccess[]
 }
 
 model StudentGroupMember {
@@ -719,6 +724,38 @@ model LiveClassAccess {
   @@index([liveClassId])
   @@index([studentGroupId])
   @@index([studentId])
+}
+
+// Cấp quyền xem "Lớp" (bài giảng video) + "Bộ đề" (đề thi) theo Subject —
+// Phase 10. Rập khuôn đúng LiveClassAccess ở trên: một dòng = một lượt cấp
+// quyền, cho HOẶC một studentGroupId HOẶC một studentId (đúng 1 trong 2,
+// CHECK constraint thêm thủ công vào migration SQL). "Lớp"/"Bộ đề" không
+// cần model nội dung riêng — Subject chính là đơn vị cấp quyền, nội dung bên
+// trong (VideoLesson/Exam PUBLISHED thuộc subject đó) hiển thị tự động.
+model SubjectAccess {
+  id             String        @id @default(uuid()) @db.Uuid
+  subjectId      String        @db.Uuid
+  subject        Subject       @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  studentGroupId String?       @db.Uuid
+  studentGroup   StudentGroup? @relation(fields: [studentGroupId], references: [id], onDelete: Restrict)
+  studentId      String?       @db.Uuid
+  student        User?         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  createdAt      DateTime      @default(now())
+
+  @@index([subjectId])
+  @@index([studentGroupId])
+  @@index([studentId])
+}
+
+// Ghi nhớ ánh xạ "tên cột Excel" (VD "T", "ĐGNL") → Subject, để lần nhập
+// roster sau tự nhận diện thay vì phải map tay lại mỗi lần — Phase 10.
+model RosterColumnMapping {
+  id         String   @id @default(uuid()) @db.Uuid
+  headerText String   @unique
+  subjectId  String   @db.Uuid
+  subject    Subject  @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 model LiveClassParticipant {

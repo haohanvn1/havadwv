@@ -176,10 +176,12 @@ describe("Phase 5 — /student root và các trang module placeholder", () => {
   // StudentLayout nên chỉ cần kiểm tra 2 route là đủ chứng minh cơ chế áp
   // dụng chung, không cần lặp lại cho cả 8 route.
   // "/student/exams" từng là placeholder đại diện ở đây nhưng đã có nội dung
-  // thật từ Phase 9A (danh sách đề Published) — đổi sang "/student/calendar"
-  // (vẫn còn là placeholder) để giữ nguyên mục đích ban đầu của vòng lặp này:
-  // chứng minh cơ chế StudentLayout dùng chung, không phải test riêng exams.
-  for (const pathname of ["/student/calendar", "/student/video-lessons"]) {
+  // thật từ Phase 9A (danh sách đề Published); "/student/video-lessons" cũng
+  // vậy từ Phase 10 (danh sách "Lớp" theo Subject) — đổi sang
+  // "/student/calendar" + "/student/question-review" (vẫn còn là placeholder)
+  // để giữ nguyên mục đích ban đầu của vòng lặp này: chứng minh cơ chế
+  // StudentLayout dùng chung, không phải test riêng từng module.
+  for (const pathname of ["/student/calendar", "/student/question-review"]) {
     it(`GET ${pathname} (STUDENT) → 200, hiển thị placeholder`, async () => {
       const res = await getNoRedirect(pathname, studentCookie);
       expect(res.status).toBe(200);

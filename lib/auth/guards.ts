@@ -14,6 +14,7 @@ export type AuthUser = {
   phone: string | null;
   role: SessionRole;
   status: "ACTIVE" | "INACTIVE";
+  mustChangePassword: boolean;
   lastLoginAt: Date | null;
   createdAt: Date;
 };
@@ -26,12 +27,13 @@ function toAuthUser(user: {
   phone: string | null;
   role: SessionRole;
   status: "ACTIVE" | "INACTIVE";
+  mustChangePassword: boolean;
   lastLoginAt: Date | null;
   createdAt: Date;
 }): AuthUser {
   // Chỉ chọn field an toàn — không bao giờ để passwordHash lọt ra khỏi đây.
-  const { id, username, fullName, email, phone, role, status, lastLoginAt, createdAt } = user;
-  return { id, username, fullName, email, phone, role, status, lastLoginAt, createdAt };
+  const { id, username, fullName, email, phone, role, status, mustChangePassword, lastLoginAt, createdAt } = user;
+  return { id, username, fullName, email, phone, role, status, mustChangePassword, lastLoginAt, createdAt };
 }
 
 /**
@@ -70,6 +72,11 @@ export async function requireRole(role: SessionRole): Promise<AuthUser> {
   if (user.role !== role) {
     redirect(user.role === "ADMIN" ? "/admin/dashboard" : "/student/dashboard");
   }
+  // Tài khoản vừa được tạo/đặt lại mật khẩu hàng loạt (import Excel, Admin
+  // reset mật khẩu) buộc phải tự đổi mật khẩu trước khi vào bất kỳ trang
+  // nào khác — trang /change-password tự gọi requireAuth() (không phải
+  // requireRole) nên không bị vướng vào chính điều kiện này.
+  if (user.mustChangePassword) redirect("/change-password");
   return user;
 }
 

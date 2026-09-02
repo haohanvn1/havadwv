@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { authenticate, LoginError } from "@/server/services/authService";
+import { authenticate, changeOwnPassword, LoginError } from "@/server/services/authService";
 
 // Test này chạy trên database thật (Postgres dev), dùng lại user "admin" đã
 // seed và tự tạo/xoá một user INACTIVE riêng — không đụng tới seed gốc.
@@ -63,5 +63,31 @@ describe("authService.authenticate", () => {
 
     expect(wrongPassword).toBe(notFound);
     expect(notFound).toBe(inactive);
+  });
+});
+
+describe("authService.changeOwnPassword", () => {
+  it("đổi mật khẩu thành công → đăng nhập được bằng mật khẩu mới, tắt cờ mustChangePassword", async () => {
+    const user = await prisma.user.create({
+      data: {
+        username: `vitest_changepw_${Date.now()}`,
+        passwordHash: await bcrypt.hash("MatKhauCu@123", 10),
+        role: "STUDENT",
+        fullName: "[vitest] Change Password",
+        status: "ACTIVE",
+        mustChangePassword: true,
+      },
+    });
+
+    await changeOwnPassword(user.id, "MatKhauMoi@456");
+
+    const fresh = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    expect(fresh.mustChangePassword).toBe(false);
+
+    await expect(authenticate(user.username, "MatKhauCu@123")).rejects.toBeInstanceOf(LoginError);
+    const authenticated = await authenticate(user.username, "MatKhauMoi@456");
+    expect(authenticated.id).toBe(user.id);
+
+    await prisma.user.delete({ where: { id: user.id } });
   });
 });

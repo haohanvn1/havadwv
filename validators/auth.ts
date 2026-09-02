@@ -6,3 +6,15 @@ export const loginSchema = z.object({
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
+
+export const changePasswordSchema = z
+  .object({
+    newPassword: z.string().min(8, "Mật khẩu mới phải có ít nhất 8 ký tự."),
+    confirmPassword: z.string().min(1, "Vui lòng nhập lại mật khẩu mới."),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: "Mật khẩu nhập lại không khớp.",
+    path: ["confirmPassword"],
+  });
+
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;

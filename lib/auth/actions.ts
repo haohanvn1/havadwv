@@ -2,12 +2,13 @@
 
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { loginSchema } from "@/validators/auth";
-import { authenticate, LoginError } from "@/server/services/authService";
+import { loginSchema, changePasswordSchema } from "@/validators/auth";
+import { authenticate, changeOwnPassword, LoginError } from "@/server/services/authService";
 import { signSession } from "@/lib/auth/session";
 import { setSessionCookie, clearSessionCookie } from "@/lib/auth/cookies";
 import { checkRateLimit, resetRateLimit } from "@/lib/auth/rate-limit";
 import { resolveSafeRedirectPath, getDefaultDashboardPath } from "@/lib/auth/redirect-target";
+import { requireAuth } from "@/lib/auth/guards";
 
 export interface LoginFormState {
   error?: string;
@@ -50,6 +51,10 @@ export async function loginAction(
   const token = await signSession({ sub: user.id, role: user.role, username: user.username });
   await setSessionCookie(token);
 
+  if (user.mustChangePassword) {
+    redirect("/change-password");
+  }
+
   const from = formData.get("from");
   const target = resolveSafeRedirectPath(from, user.role) ?? getDefaultDashboardPath(user.role);
 
@@ -59,4 +64,29 @@ export async function loginAction(
 export async function logoutAction() {
   await clearSessionCookie();
   redirect("/login");
+}
+
+export interface ChangePasswordFormState {
+  error?: string;
+}
+
+/** Đổi mật khẩu lần đầu sau khi tài khoản được tạo hàng loạt (import Excel) hoặc Admin đặt lại mật khẩu (Phase 10). */
+export async function changePasswordAction(
+  _prevState: ChangePasswordFormState,
+  formData: FormData,
+): Promise<ChangePasswordFormState> {
+  const user = await requireAuth();
+
+  const parsed = changePasswordSchema.safeParse({
+    newPassword: formData.get("newPassword"),
+    confirmPassword: formData.get("confirmPassword"),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ." };
+  }
+
+  await changeOwnPassword(user.id, parsed.data.newPassword);
+
+  redirect(getDefaultDashboardPath(user.role));
 }

@@ -73,6 +73,21 @@ async function main() {
     create: { name: "Tiếng Anh", slug: "tieng-anh", order: 2 },
   });
 
+  // ĐGNL/ĐGTD là các kỳ thi tổng hợp, được coi là Subject bình thường (Phase
+  // 10) — dùng chung đúng cơ chế Subject → Exam/VideoLesson/SubjectAccess
+  // như mọi môn học khác, không cần khái niệm examType riêng ở cấp Subject.
+  const dgnl = await prisma.subject.upsert({
+    where: { slug: "dgnl" },
+    update: {},
+    create: { name: "Đánh giá năng lực", slug: "dgnl", order: 3 },
+  });
+
+  const dgtd = await prisma.subject.upsert({
+    where: { slug: "dgtd" },
+    update: {},
+    create: { name: "Đánh giá tư duy", slug: "dgtd", order: 4 },
+  });
+
   const daiSo = await prisma.topic.upsert({
     where: { subjectId_slug: { subjectId: toan.id, slug: "dai-so" } },
     update: {},
@@ -176,10 +191,28 @@ async function main() {
     },
   });
 
+  // ---------- Subject access (Phase 10) ----------
+  // Cấp quyền "Lớp"/"Bộ đề" mặc định cho 2 học sinh seed vào 2 môn đã seed —
+  // bắt buộc phải có, nếu không toàn bộ Exam/VideoLesson gắn subjectId sẽ bị
+  // ẩn khỏi 2 tài khoản demo/test này sau khi Phase 10 bật lọc quyền theo
+  // Subject (allow-list nghiêm ngặt, không có fallback ngầm).
+  for (const student of [student1, student2]) {
+    for (const subject of [toan, tienganh]) {
+      const existing = await prisma.subjectAccess.findFirst({
+        where: { subjectId: subject.id, studentId: student.id },
+      });
+      if (!existing) {
+        await prisma.subjectAccess.create({
+          data: { subjectId: subject.id, studentId: student.id },
+        });
+      }
+    }
+  }
+
   console.log("Seed hoàn tất:");
   console.log(`  Admin:    ${admin.username}`);
   console.log(`  Students: ${student1.username}, ${student2.username}`);
-  console.log(`  Subjects: ${toan.name}, ${tienganh.name}`);
+  console.log(`  Subjects: ${toan.name}, ${tienganh.name}, ${dgnl.name}, ${dgtd.name}`);
 }
 
 main()

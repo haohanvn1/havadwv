@@ -1,12 +1,14 @@
 "use client";
 
-import { AlertTriangle, Loader2, Send } from "lucide-react";
+import { AlertTriangle, Check, Loader2, Send, X } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ClientSnapshotQuestion } from "@/server/services/examSnapshotService";
+import type { QuestionReviewItem } from "@/server/services/studentAttemptService";
 
 export type SaveState = "idle" | "saving" | "saved" | "error";
 
@@ -48,6 +50,7 @@ export function QuestionPanel({
   onMultipleChoiceToggle,
   onShortAnswerChange,
   onExplicitSave,
+  review,
 }: {
   question: ClientSnapshotQuestion;
   index: number;
@@ -62,8 +65,11 @@ export function QuestionPanel({
   onMultipleChoiceToggle: (optionId: string) => void;
   onShortAnswerChange: (text: string) => void;
   onExplicitSave: () => void;
+  /** Chỉ có sau khi Attempt đã nộp (Phase 9D) — hiện đúng/sai từng câu, KHÔNG có trong lúc làm bài. */
+  review?: QuestionReviewItem;
 }) {
   const groupName = `question-${question.questionId}`;
+  const correctOptionIds = new Set(review?.options.filter((o) => o.isCorrect).map((o) => o.id));
 
   return (
     <div
@@ -84,7 +90,7 @@ export function QuestionPanel({
             {question.points} điểm · {QUESTION_TYPE_LABELS[question.type]}
           </p>
         </div>
-        <SaveIndicator state={saveState} error={saveError} />
+        {review ? <ReviewBadge review={review} /> : <SaveIndicator state={saveState} error={saveError} />}
       </div>
 
       <p id={`${groupName}-label`} className="mb-4 text-sm leading-relaxed font-medium sm:text-base">
@@ -98,49 +104,71 @@ export function QuestionPanel({
           className="gap-2.5"
           aria-labelledby={`${groupName}-label`}
         >
-          {question.options.map((opt) => (
-            <label
-              key={opt.id}
-              className="border-border has-[[data-checked]]:border-primary has-[[data-checked]]:bg-primary/5 flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border p-3 text-sm transition-colors"
-            >
-              <RadioGroupItem value={opt.id} disabled={disabled} />
-              <span>
-                <span className="font-medium">{opt.label}.</span> {opt.content}
-              </span>
-            </label>
-          ))}
+          {question.options.map((opt) => {
+            const selected = answer.selectedOptionIds.includes(opt.id);
+            return (
+              <label
+                key={opt.id}
+                className={cn(
+                  "border-border has-[[data-checked]]:border-primary has-[[data-checked]]:bg-primary/5 flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border p-3 text-sm transition-colors",
+                  review && optionReviewClass(opt.id, selected, correctOptionIds),
+                )}
+              >
+                <RadioGroupItem value={opt.id} disabled={disabled} />
+                <span className="flex-1">
+                  <span className="font-medium">{opt.label}.</span> {opt.content}
+                </span>
+                {review ? <ReviewOptionIcon isCorrectOption={correctOptionIds.has(opt.id)} selected={selected} /> : null}
+              </label>
+            );
+          })}
         </RadioGroup>
       )}
 
       {question.type === "MULTIPLE_CHOICE" && (
         <div className="flex flex-col gap-2.5" role="group" aria-labelledby={`${groupName}-label`}>
-          {question.options.map((opt) => (
-            <label
-              key={opt.id}
-              className="border-border has-[[data-checked]]:border-primary has-[[data-checked]]:bg-primary/5 flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border p-3 text-sm transition-colors"
-            >
-              <Checkbox
-                checked={answer.selectedOptionIds.includes(opt.id)}
-                onCheckedChange={() => onMultipleChoiceToggle(opt.id)}
-                disabled={disabled}
-              />
-              <span>
-                <span className="font-medium">{opt.label}.</span> {opt.content}
-              </span>
-            </label>
-          ))}
+          {question.options.map((opt) => {
+            const selected = answer.selectedOptionIds.includes(opt.id);
+            return (
+              <label
+                key={opt.id}
+                className={cn(
+                  "border-border has-[[data-checked]]:border-primary has-[[data-checked]]:bg-primary/5 flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border p-3 text-sm transition-colors",
+                  review && optionReviewClass(opt.id, selected, correctOptionIds),
+                )}
+              >
+                <Checkbox
+                  checked={selected}
+                  onCheckedChange={() => onMultipleChoiceToggle(opt.id)}
+                  disabled={disabled}
+                />
+                <span className="flex-1">
+                  <span className="font-medium">{opt.label}.</span> {opt.content}
+                </span>
+                {review ? <ReviewOptionIcon isCorrectOption={correctOptionIds.has(opt.id)} selected={selected} /> : null}
+              </label>
+            );
+          })}
         </div>
       )}
 
       {question.type === "SHORT_ANSWER" && (
-        <Textarea
-          value={answer.answerText ?? ""}
-          onChange={(e) => onShortAnswerChange(e.target.value)}
-          rows={3}
-          placeholder="Nhập câu trả lời..."
-          disabled={disabled}
-          aria-labelledby={`${groupName}-label`}
-        />
+        <div className="flex flex-col gap-2">
+          <Textarea
+            value={answer.answerText ?? ""}
+            onChange={(e) => onShortAnswerChange(e.target.value)}
+            rows={3}
+            placeholder="Nhập câu trả lời..."
+            disabled={disabled}
+            aria-labelledby={`${groupName}-label`}
+          />
+          {review ? (
+            <p className="text-xs">
+              <span className="text-muted-foreground">Đáp án đúng: </span>
+              <span className="font-medium">{review.correctAnswerText ?? "—"}</span>
+            </p>
+          ) : null}
+        </div>
       )}
 
       {!disabled ? (
@@ -184,4 +212,38 @@ function SaveIndicator({ state, error }: { state: SaveState; error: string | nul
     );
   }
   return null;
+}
+
+/** Phase 9D — màu viền/nền của một option khi review, không chỉ dựa vào màu (còn có icon riêng — mục accessibility đã áp dụng từ 9C). */
+function optionReviewClass(optionId: string, selected: boolean, correctOptionIds: Set<string>): string {
+  if (correctOptionIds.has(optionId)) {
+    return "border-emerald-500 bg-emerald-50 dark:border-emerald-500/60 dark:bg-emerald-950/30";
+  }
+  if (selected) {
+    return "border-destructive bg-destructive/5";
+  }
+  return "";
+}
+
+function ReviewOptionIcon({ isCorrectOption, selected }: { isCorrectOption: boolean; selected: boolean }) {
+  if (isCorrectOption) {
+    return <Check className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-label="Đáp án đúng" />;
+  }
+  if (selected) {
+    return <X className="text-destructive size-4 shrink-0" aria-label="Bạn đã chọn — không đúng" />;
+  }
+  return null;
+}
+
+function ReviewBadge({ review }: { review: QuestionReviewItem }) {
+  if (!review.isAnswered) {
+    return <Badge variant="secondary">Bỏ trống</Badge>;
+  }
+  return review.isCorrect ? (
+    <Badge className="border-transparent bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400">
+      Đúng · {review.score}/{review.maxScore} điểm
+    </Badge>
+  ) : (
+    <Badge variant="destructive">Sai · 0/{review.maxScore} điểm</Badge>
+  );
 }

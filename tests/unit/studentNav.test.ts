@@ -8,7 +8,7 @@ import {
 describe("getStudentPageTitle", () => {
   it("trả về đúng label từ nav config", () => {
     expect(getStudentPageTitle("/student/dashboard")).toBe("Dashboard");
-    expect(getStudentPageTitle("/student/video-lessons")).toBe("Bài giảng");
+    expect(getStudentPageTitle("/student/video-lessons")).toBe("Lớp");
   });
 
   it("khớp route con (vd /student/exam-history/123 vẫn active cho Lịch sử làm bài)", () => {
