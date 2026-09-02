@@ -6,12 +6,13 @@ import {
   ListChecks,
   Radio,
   Settings,
+  Upload,
   Users,
   Video,
   Wand2,
   type LucideIcon,
 } from "lucide-react";
-import { isNavItemActive } from "./nav-utils";
+import { findActiveNavItem, isNavItemActive } from "./nav-utils";
 
 export { isNavItemActive };
 
@@ -40,6 +41,7 @@ export const adminNavGroups: AdminNavGroup[] = [
     label: "Content",
     items: [
       { label: "Question Bank", href: "/admin/question-bank", icon: BookOpen },
+      { label: "Nhập câu hỏi", href: "/admin/question-bank/import", icon: Upload },
       { label: "Video Lessons", href: "/admin/video-lessons", icon: Video },
     ],
   },
@@ -76,6 +78,6 @@ export function getAdminPageTitle(pathname: string): string {
   for (const [prefix, title] of Object.entries(EXTRA_PAGE_TITLES)) {
     if (isNavItemActive(pathname, prefix)) return title;
   }
-  const match = adminNavItems.find((item) => isNavItemActive(pathname, item.href));
+  const match = findActiveNavItem(pathname, adminNavItems);
   return match?.label ?? "Admin";
 }

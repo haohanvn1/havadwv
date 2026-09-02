@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Plus, Upload } from "lucide-react";
 import { requireRole } from "@/lib/auth/guards";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -38,10 +38,20 @@ export default async function QuestionBankPage({
             Quản lý câu hỏi dùng để tạo đề thi và bài ôn tập.
           </p>
         </div>
-        <Button render={<Link href="/admin/question-bank/new" />} nativeButton={false}>
-          <Plus className="size-4" />
-          Thêm câu hỏi
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            render={<Link href="/admin/question-bank/import" />}
+            nativeButton={false}
+          >
+            <Upload className="size-4" />
+            Nhập từ file
+          </Button>
+          <Button render={<Link href="/admin/question-bank/new" />} nativeButton={false}>
+            <Plus className="size-4" />
+            Thêm câu hỏi
+          </Button>
+        </div>
       </div>
 
       <QuestionFilters subjects={subjects} />

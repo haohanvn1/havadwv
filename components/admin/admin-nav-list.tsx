@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogOut } from "lucide-react";
-import { adminNavGroups, isNavItemActive } from "@/lib/nav/admin-nav";
+import { adminNavGroups, adminNavItems } from "@/lib/nav/admin-nav";
+import { findActiveNavItem } from "@/lib/nav/nav-utils";
 import { logoutAction } from "@/lib/auth/actions";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +21,7 @@ export function AdminNavList({
   collapsedLabels?: boolean;
 }) {
   const pathname = usePathname();
+  const activeItem = findActiveNavItem(pathname, adminNavItems);
 
   return (
     <div className="flex h-full flex-col justify-between">
@@ -35,7 +37,7 @@ export function AdminNavList({
               {group.label}
             </span>
             {group.items.map((item) => {
-              const active = isNavItemActive(pathname, item.href);
+              const active = item.href === activeItem?.href;
               const Icon = item.icon;
               return (
                 <Link

@@ -119,6 +119,34 @@ Sai vai trò không hiện trang lỗi chết — tự động đưa về dashbo
 của chính người đó, vì nội dung của khu vực kia chưa từng được render ra
 (chặn ở layout trước khi children mount).
 
+## Document Import Pipeline (Phase 7A)
+
+Admin có thể tải lên đề thi dạng PDF/DOCX ở `/admin/question-bank/import` để
+tự động tách thành các câu hỏi nháp, thay vì gõ tay từng câu. Luồng xử lý:
+
+```
+Upload (PDF/DOCX)
+  → ImportedFile      (lưu metadata + file gốc qua FileStorageService)
+  → ImportJob         (PENDING → PROCESSING → DONE | FAILED)
+  → DocumentParser     (pdfjs-dist cho PDF theo từng trang, mammoth cho DOCX)
+  → ParsedDocument     (representation chuẩn hoá, không phụ thuộc định dạng gốc)
+  → QuestionCandidateDetector (dò pattern "Câu N.", "Question N", "N." — KHÔNG AI)
+  → ImportQuestionDraft (mỗi candidate một draft, giữ page/nguồn để trace lại)
+```
+
+**Quan trọng: Phase 7A chưa dùng AI ở bất kỳ bước nào** — việc tách câu hỏi
+hoàn toàn dựa trên pattern-matching. Nếu không pattern nào khớp đủ tin cậy,
+toàn bộ text được giữ nguyên thành 1 draft duy nhất kèm cảnh báo "cần xem
+lại", không bao giờ làm mất dữ liệu. Draft **không** tự động trở thành
+Question — đó là một bước duyệt thủ công riêng (Admin Review → Approve) dự
+kiến ở Phase 7B.
+
+`FileStorageService` (`server/services/fileStorageService.ts`) là một
+interface trừu tượng (`save/read/delete/getMetadata`); implementation hiện
+tại lưu ở local filesystem (`storage/imports/{uuid}/original.{ext}`, xem
+`IMPORT_STORAGE_DIR` trong `.env.example`) — chuyển sang S3/R2/Supabase
+Storage sau này chỉ cần viết implementation mới, không sửa business logic.
+
 ## Security
 
 - **Password**: hash bằng bcrypt (`bcryptjs`, 10 rounds) — không bao giờ lưu plaintext.

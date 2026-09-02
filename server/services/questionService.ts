@@ -143,8 +143,12 @@ function buildOptionsPlan(input: QuestionInput) {
   return [];
 }
 
-async function assertTopicBelongsToSubject(topicId: string, subjectId: string) {
-  const topic = await prisma.topic.findUnique({ where: { id: topicId } });
+async function assertTopicBelongsToSubject(
+  topicId: string,
+  subjectId: string,
+  client: Prisma.TransactionClient = prisma,
+) {
+  const topic = await client.topic.findUnique({ where: { id: topicId } });
   if (!topic || topic.subjectId !== subjectId) {
     throw new QuestionValidationError({ topicId: "Chủ đề không thuộc môn học đã chọn." });
   }
@@ -168,11 +172,22 @@ function questionWriteData(input: QuestionInput) {
   };
 }
 
-export async function createQuestion(input: QuestionInput, createdById: string | null) {
-  await assertTopicBelongsToSubject(input.topicId, input.subjectId);
+/**
+ * `client` mặc định là singleton `prisma` (mọi call site hiện tại không đổi
+ * hành vi) — truyền một `Prisma.TransactionClient` khi cần Question được tạo
+ * atomic cùng các thay đổi khác trong cùng transaction (vd Phase 7B: approve
+ * draft phải tạo Question + cập nhật ImportQuestionDraft trong một giao dịch
+ * duy nhất, không tách rời logic tạo Question ra một bản sao khác).
+ */
+export async function createQuestion(
+  input: QuestionInput,
+  createdById: string | null,
+  client: Prisma.TransactionClient = prisma,
+) {
+  await assertTopicBelongsToSubject(input.topicId, input.subjectId, client);
   const optionsPlan = buildOptionsPlan(input);
 
-  return prisma.question.create({
+  return client.question.create({
     data: {
       ...questionWriteData(input),
       createdById,

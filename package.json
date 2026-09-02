@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.123.0",
     "@base-ui/react": "^1.7.0",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
@@ -20,7 +21,9 @@
     "clsx": "^2.1.1",
     "jose": "^6.2.10",
     "lucide-react": "^1.38.0",
+    "mammoth": "^1.12.2",
     "next": "16.3.4",
+    "pdfjs-dist": "^6.3.289",
     "pg": "^8.23.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
