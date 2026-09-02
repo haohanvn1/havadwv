@@ -16,3 +16,14 @@ export async function getStudentCookie(): Promise<string> {
   });
   return `session=${token}`;
 }
+
+/** Student thứ hai — dùng cho test authorization "Student A không truy cập được resource của Student B". */
+export async function getStudentBCookie(): Promise<string> {
+  const student = await prisma.user.findUniqueOrThrow({ where: { username: "student2" } });
+  const token = await signSession({
+    sub: student.id,
+    role: "STUDENT",
+    username: student.username,
+  });
+  return `session=${token}`;
+}
