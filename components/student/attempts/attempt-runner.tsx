@@ -245,7 +245,7 @@ export function AttemptRunner({ initial }: { initial: AttemptDetail }) {
       {/* Header — sticky, không phải dashboard card (mục 3/24) */}
       <div className="bg-background/95 border-border sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b px-1 py-3 backdrop-blur">
         <div>
-          <h1 className="text-base font-bold">{initial.exam?.title ?? "Bài làm"}</h1>
+          <h1 className="text-base font-bold">{initial.exam?.title ?? initial.snapshot.title ?? "Bài làm"}</h1>
           <p className="text-muted-foreground text-xs">
             Lần làm bài #{initial.attemptNumber} · Đã trả lời {answeredCount}/{questions.length}
           </p>

@@ -120,6 +120,46 @@ export async function buildExamSnapshot(examId: string): Promise<ExamSnapshot> {
   };
 }
 
+interface PracticeSourceQuestion {
+  id: string;
+  type: QuestionType;
+  content: string;
+  correctAnswerText: string | null;
+  options: { id: string; label: string; content: string; isCorrect: boolean; order: number }[];
+}
+
+/**
+ * Snapshot cho Practice Attempt (Phase 11) — KHÔNG có Exam/ExamQuestion đứng
+ * sau, nên không thể gọi buildExamSnapshot(examId). Dùng lại đúng shape
+ * ExamSnapshot/SnapshotQuestion (không tạo type song song) — chỉ khác nguồn
+ * dữ liệu: build trực tiếp từ Question/QuestionOption đã chọn ngẫu nhiên,
+ * thay vì từ ExamQuestion. `order` = vị trí trong mảng đã được shuffle sẵn
+ * trước khi truyền vào (hàm này không tự sắp xếp hay xáo lại — snapshot chỉ
+ * đóng băng thứ tự đã quyết định). `points` bỏ trống — sanitizeSnapshotForStudent
+ * đã tự mặc định 1 khi thiếu, đúng semantics đã có từ Phase 9A.
+ */
+export function buildPracticeSnapshot(questions: PracticeSourceQuestion[], title: string): ExamSnapshot {
+  const snapshotQuestions: SnapshotQuestion[] = questions.map((q, index) => ({
+    questionId: q.id,
+    order: index + 1,
+    type: q.type,
+    content: q.content,
+    options: [...q.options]
+      .sort((a, b) => a.order - b.order)
+      .map((o) => ({ id: o.id, label: o.label, content: o.content, isCorrect: o.isCorrect })),
+    correctAnswerText: q.correctAnswerText,
+  }));
+
+  return {
+    examId: "",
+    title,
+    examType: "PRACTICE",
+    durationMinutes: 0,
+    questionCount: snapshotQuestions.length,
+    questions: snapshotQuestions,
+  };
+}
+
 /** Bóc tách field nhạy cảm trước khi trả cho Student — không bao giờ serialize snapshot gốc trực tiếp. */
 export function sanitizeSnapshotForStudent(snapshot: ExamSnapshot): ClientExamSnapshot {
   return {
