@@ -6,9 +6,15 @@ tránh trùng lặp (ví dụ: chấm điểm bài thi chỉ có một chỗ imp
 
 Các service sẽ được thêm dần theo từng phase, ví dụ:
 
-- `examService.ts`, `attemptService.ts`, `questionService.ts` — Phase 6–7, 10–12
-- `importService.ts`, `aiExtractionService.ts` — Phase 8–9
+- `examService.ts`, `attemptService.ts` — Phase 10–12
 - `blueprintService.ts`, `questionMatchingService.ts`, `examGenerationService.ts` — module sinh đề
 - `videoLessonService.ts`, `liveClassService.ts` — module Learning Content
 
-Trống ở Phase 1 vì chưa implement tính năng nào.
+Đã có:
+
+- `questionService.ts` (Phase 6) — CRUD Question Bank.
+- `fileStorageService.ts`, `documentParser/`, `questionCandidateDetector.ts`,
+  `questionImportService.ts` (Phase 7A) — pipeline import PDF/DOCX → parse →
+  tách câu hỏi bằng pattern (KHÔNG AI) → `ImportQuestionDraft`. AI extraction
+  thật (nếu có) sẽ là một bước thay thế/bổ sung cho `questionCandidateDetector`
+  ở phase sau, không đổi kiến trúc pipeline.
