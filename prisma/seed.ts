@@ -113,81 +113,83 @@ async function main() {
   });
 
   // ---------- Questions ----------
-  await prisma.question.create({
-    data: {
-      content: "Giải phương trình 2x + 3 = 7. Tìm x.",
-      type: "SINGLE_CHOICE",
-      difficulty: "EASY",
-      subjectId: toan.id,
-      topicId: daiSo.id,
-      status: "ACTIVE",
-      createdById: admin.id,
-      options: {
-        create: [
-          { label: "A", content: "1", isCorrect: false, order: 1 },
-          { label: "B", content: "2", isCorrect: true, order: 2 },
-          { label: "C", content: "3", isCorrect: false, order: 3 },
-          { label: "D", content: "4", isCorrect: false, order: 4 },
-        ],
-      },
+  // Question không có unique key tự nhiên để dùng upsert() — tự kiểm tra
+  // tồn tại theo content trước khi tạo, để chạy lại `prisma db seed` nhiều
+  // lần không tạo trùng lặp (bug thật đã gặp: seed cũ dùng .create() thẳng,
+  // chạy 2 lần sinh ra 8 câu hỏi thay vì 4).
+  async function seedQuestionOnce(content: string, data: Parameters<typeof prisma.question.create>[0]["data"]) {
+    const existing = await prisma.question.findFirst({ where: { content } });
+    if (existing) return existing;
+    return prisma.question.create({ data });
+  }
+
+  await seedQuestionOnce("Giải phương trình 2x + 3 = 7. Tìm x.", {
+    content: "Giải phương trình 2x + 3 = 7. Tìm x.",
+    type: "SINGLE_CHOICE",
+    difficulty: "EASY",
+    subjectId: toan.id,
+    topicId: daiSo.id,
+    status: "ACTIVE",
+    createdById: admin.id,
+    options: {
+      create: [
+        { label: "A", content: "1", isCorrect: false, order: 1 },
+        { label: "B", content: "2", isCorrect: true, order: 2 },
+        { label: "C", content: "3", isCorrect: false, order: 3 },
+        { label: "D", content: "4", isCorrect: false, order: 4 },
+      ],
     },
   });
 
-  await prisma.question.create({
-    data: {
-      content: "Trong các số sau, số nào là ước của 12?",
-      type: "MULTIPLE_CHOICE",
-      difficulty: "MEDIUM",
-      subjectId: toan.id,
-      topicId: hinhHoc.id,
-      status: "ACTIVE",
-      createdById: admin.id,
-      options: {
-        create: [
-          { label: "A", content: "3", isCorrect: true, order: 1 },
-          { label: "B", content: "5", isCorrect: false, order: 2 },
-          { label: "C", content: "6", isCorrect: true, order: 3 },
-          { label: "D", content: "7", isCorrect: false, order: 4 },
-        ],
-      },
+  await seedQuestionOnce("Trong các số sau, số nào là ước của 12?", {
+    content: "Trong các số sau, số nào là ước của 12?",
+    type: "MULTIPLE_CHOICE",
+    difficulty: "MEDIUM",
+    subjectId: toan.id,
+    topicId: hinhHoc.id,
+    status: "ACTIVE",
+    createdById: admin.id,
+    options: {
+      create: [
+        { label: "A", content: "3", isCorrect: true, order: 1 },
+        { label: "B", content: "5", isCorrect: false, order: 2 },
+        { label: "C", content: "6", isCorrect: true, order: 3 },
+        { label: "D", content: "7", isCorrect: false, order: 4 },
+      ],
     },
   });
 
-  await prisma.question.create({
-    data: {
-      content: "Choose the correct form: She ___ to school every day.",
-      type: "SINGLE_CHOICE",
-      difficulty: "EASY",
-      subjectId: tienganh.id,
-      topicId: nguPhap.id,
-      status: "ACTIVE",
-      createdById: admin.id,
-      options: {
-        create: [
-          { label: "A", content: "go", isCorrect: false, order: 1 },
-          { label: "B", content: "goes", isCorrect: true, order: 2 },
-          { label: "C", content: "going", isCorrect: false, order: 3 },
-          { label: "D", content: "gone", isCorrect: false, order: 4 },
-        ],
-      },
+  await seedQuestionOnce("Choose the correct form: She ___ to school every day.", {
+    content: "Choose the correct form: She ___ to school every day.",
+    type: "SINGLE_CHOICE",
+    difficulty: "EASY",
+    subjectId: tienganh.id,
+    topicId: nguPhap.id,
+    status: "ACTIVE",
+    createdById: admin.id,
+    options: {
+      create: [
+        { label: "A", content: "go", isCorrect: false, order: 1 },
+        { label: "B", content: "goes", isCorrect: true, order: 2 },
+        { label: "C", content: "going", isCorrect: false, order: 3 },
+        { label: "D", content: "gone", isCorrect: false, order: 4 },
+      ],
     },
   });
 
-  await prisma.question.create({
-    data: {
-      content: "'Happy' và 'Glad' là hai từ đồng nghĩa.",
-      type: "TRUE_FALSE",
-      difficulty: "EASY",
-      subjectId: tienganh.id,
-      topicId: tuVung.id,
-      status: "ACTIVE",
-      createdById: admin.id,
-      options: {
-        create: [
-          { label: "A", content: "Đúng", isCorrect: true, order: 1 },
-          { label: "B", content: "Sai", isCorrect: false, order: 2 },
-        ],
-      },
+  await seedQuestionOnce("'Happy' và 'Glad' là hai từ đồng nghĩa.", {
+    content: "'Happy' và 'Glad' là hai từ đồng nghĩa.",
+    type: "TRUE_FALSE",
+    difficulty: "EASY",
+    subjectId: tienganh.id,
+    topicId: tuVung.id,
+    status: "ACTIVE",
+    createdById: admin.id,
+    options: {
+      create: [
+        { label: "A", content: "Đúng", isCorrect: true, order: 1 },
+        { label: "B", content: "Sai", isCorrect: false, order: 2 },
+      ],
     },
   });
 
